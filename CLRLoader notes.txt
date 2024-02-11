@@ -1,0 +1,46 @@
+=== loading CLR assembly from memory ===
+
+NET:
+1. obtain deprecated CorRuntimeHost interface
+2. get the AppDomain
+3. copy the assembly bytes into a SAFEARRAY
+4. call AppDomain->Load_3(...) passing in the SAFEARRAY
+
+mono:
+1. obtain a MonoImage* from the bytes (maybe via mono_image_open_from_data(...)?)
+2. call mono_assembly_load_from_predicate (this requires the filepath...?)
+3. call mono_config_for_assembly (?)
+4. call mono_image_close
+
+
+for mono, currently using mono_domain_assembly_open which requires filename.
+looking at source code:
+
+* mono_assembly_open_predicate is called, passing the filename
+	* mono_image_open_a_lot is called, passing the filename
+		* MonoLoadImage is called
+			* this just checks that the PE format is valid and then calls LoadLibrary, returning the HMODULE.
+		* mono_image_open_from_module_handle is called
+			* do_mono_image_load
+				* looks like it just parses the file and sets up the image struct
+			* register_image
+				* just adds it to the hash table
+	* mono_assembly_load_from_predicate is called, passing the image and filename
+	* mono_config_for_assembly is called, passing assembly->image.
+	
+	
+so, looking at mono_image_open_from_data:
+* mono_image_open_from_data_internal eventually gets called, with NULL passed as the name
+	* do_mono_image_load is called
+	* register_image is called
+	
+so it should be a valid MonoImage* as if it were loading via mono_image_open_a_lot w/ a filename
+so then all we have to do is call mono_assembly_load_from_predicate and mono_config_for_assembly to emulate the rest of the mono_domain_assembly_open call.
+the problem is that mono_assembly_load_from_predicate is supposed to take in the filename...
+
+
+
+
+=== IL2CPP ===
+could probably support this if the programmer has unity installed on their PC. we can add a post build step to the csproj that feeds the module to the il2cpp transpiler.
+injection is then just normal VirtualAlloc filepath + CreateRemoteThread at LoadLibrary address. or just build the LoadLibrary part into the current bootstrapper.
